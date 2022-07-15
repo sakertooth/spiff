@@ -3,6 +3,7 @@
 #include "asio/connect.hpp"
 #include "asio/read.hpp"
 #include "asio/write.hpp"
+#include "varint.hpp"
 
 #include <functional>
 #include <iostream>
@@ -60,12 +61,47 @@ namespace spiff {
 
     void minecraft_proxy_connection::handle_connect(const asio::error_code& ec) {
         if (!ec) {
-            start_transmission();
+            read_from_client();
         }
     }
 
-    void minecraft_proxy_connection::start_transmission() {
+    void minecraft_proxy_connection::read_from_client() {
+        asio::async_read(m_client_to_proxy_socket, asio::dynamic_buffer(m_client_read_buffer), asio::transfer_at_least(1), std::bind(&minecraft_proxy_connection::handle_read_from_client, shared_from_this(), std::placeholders::_1, std::placeholders::_2));
+    }
+
+    void minecraft_proxy_connection::handle_read_from_client(const asio::error_code& ec, size_t bytes_transferred) {
+        if (!ec) {
+            minecraft_varint packet_length;
+            try {
+                packet_length = minecraft_varint{m_client_read_buffer};
+            }
+            catch (const std::runtime_error& ec) {
+                read_from_client();
+            }
+
+            auto total_packet_length = packet_length.bytes().size() + packet_length.value();
+            if (total_packet_length < m_client_read_buffer.size()) {
+                asio::async_read(m_client_to_proxy_socket, asio::dynamic_buffer(m_client_read_buffer), asio::transfer_exactly(total_packet_length - m_client_read_buffer.size()), [self = shared_from_this()] (const asio::error_code& ec, size_t bytes_transferred) {
+                    self->handle_read_from_client(ec, bytes_transferred);
+                });
+            }
+
+            auto packet = asio::dynamic_buffer(m_client_read_buffer, total_packet_length);
+            
+            //TODO: Dissect and forward packet...
+            asio::dynamic_buffer(m_client_read_buffer).consume(total_packet_length);
+
+            if (m_client_read_buffer.size() == 0) {
+                read_from_client();
+            }
+        }
+    }
+
+    void minecraft_proxy_connection::read_from_server() {
         
     }
 
+    void minecraft_proxy_connection::handle_read_from_server(const asio::error_code& ec, size_t bytes_transferred) {
+
+    }
 }
