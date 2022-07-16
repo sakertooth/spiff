@@ -27,7 +27,7 @@ namespace spiff {
 
         int byte_read_marker = 0;
         while (true) {
-            current_byte = bytes[byte_read_marker++];
+            current_byte = bytes.at(byte_read_marker++);
             m_value |= std::to_integer<int>((current_byte & std::byte{segment_bits})) << position;
 
             if (std::to_integer<int>(current_byte & std::byte{continue_bit}) == 0) {
@@ -71,7 +71,7 @@ namespace spiff {
 
         int byte_read_marker = 0;
         while (true) {
-            current_byte = bytes[byte_read_marker++];
+            current_byte = bytes.at(byte_read_marker++);
             m_value |= std::to_integer<long>(current_byte & std::byte{segment_bits}) << position;
 
             if (std::to_integer<long>(current_byte & std::byte{continue_bit}) == 0) {
