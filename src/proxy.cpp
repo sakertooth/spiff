@@ -3,7 +3,7 @@
 #include "asio/connect.hpp"
 #include "asio/read.hpp"
 #include "asio/write.hpp"
-#include "varint.hpp"
+#include "varint_varlong.hpp"
 
 #include <functional>
 #include <iostream>
@@ -67,16 +67,16 @@ namespace spiff {
         m_proxy_to_server_socket.close();
     }
 
-    void minecraft_proxy_connection::read_from_client() {
-        auto buf = std::make_shared<std::vector<std::byte>>(m_buffer_size);
+    void minecraft_proxy_connection::read_from_client(int buffer_size) {
+        auto buf = std::make_shared<std::vector<mc_byte>>(buffer_size);
         m_proxy_to_client_socket.async_read_some(asio::buffer(*buf), [self = shared_from_this(), buf](const asio::error_code& ec, size_t bytes_transferred) {
             self->m_client_read_buffer.insert(self->m_client_read_buffer.end(), buf->begin(), buf->begin() + bytes_transferred);
             self->handle_read_from_client(ec, bytes_transferred);
         });
     }
 
-    void minecraft_proxy_connection::read_from_server() {
-        auto buf = std::make_shared<std::vector<std::byte>>(m_buffer_size);
+    void minecraft_proxy_connection::read_from_server(int buffer_size) {
+        auto buf = std::make_shared<std::vector<mc_byte>>(buffer_size);
         m_proxy_to_server_socket.async_read_some(asio::buffer(*buf), [self = shared_from_this(), buf](const asio::error_code& ec, size_t bytes_transferred) {
             self->m_server_read_buffer.insert(self->m_server_read_buffer.end(), buf->begin(), buf->begin() + bytes_transferred);
             self->handle_read_from_server(ec, bytes_transferred);
@@ -102,23 +102,49 @@ namespace spiff {
             try {
                 packet_length = minecraft_varint{m_client_read_buffer};
             }
-            catch (const std::runtime_error&) {
+            catch (const std::out_of_range&) {
                 read_from_client();
+                return;
+            }
+            catch (const std::runtime_error& varint_error) {
+                std::cout << "An error occured while reading the packet length from the client: " << varint_error.what() << '\n';
+                close();
             }
 
-            const size_t total_packet_length = packet_length.bytes().size() + packet_length.value();
+            const size_t total_packet_length = packet_length.value() + packet_length.bytes().size();
             if (m_client_read_buffer.size() < total_packet_length) {
-                read_from_client();
+                const size_t bytes_remaining = total_packet_length - m_client_read_buffer.size();
+                auto buf = std::make_shared<std::vector<mc_byte>>(bytes_remaining);
+
+                asio::async_read(m_proxy_to_client_socket, 
+                    asio::buffer(*buf), 
+                    asio::transfer_exactly(bytes_remaining), 
+                    [self = shared_from_this(), buf, bytes_remaining] (const asio::error_code& ec, size_t) {
+                        if (!ec) {
+                            self->m_client_read_buffer.insert(self->m_client_read_buffer.end(), buf->begin(), buf->begin() + bytes_remaining);
+                            self->handle_read_from_client(ec, bytes_remaining);
+                        }
+                        else {
+                            self->close();
+                        }
+                    }
+                );
+
+                return;
             }
 
-            asio::async_write(m_proxy_to_server_socket, asio::buffer(m_client_read_buffer, total_packet_length), [self = shared_from_this(), total_packet_length](const asio::error_code& ec, size_t) {
-                self->read_from_server();
-                self->read_from_client();
-                asio::dynamic_buffer(self->m_client_read_buffer).consume(total_packet_length);
+            const auto packet = asio::buffer(m_client_read_buffer, total_packet_length);
+            asio::async_write(m_proxy_to_server_socket, packet, [self = shared_from_this(), total_packet_length](const asio::error_code& ec, size_t) {
+                if (!ec) {
+                    self->m_client_read_buffer.erase(self->m_client_read_buffer.begin(), self->m_client_read_buffer.begin() + total_packet_length);
+                    self->read_from_client();
+                }
+                else {
+                    self->close();
+                }
             });
         }
         else {
-            std::cout << "Failed to read from client: " << ec.message() << '\n';
             close();
         }
     }
@@ -129,23 +155,49 @@ namespace spiff {
             try {
                 packet_length = minecraft_varint{m_server_read_buffer};
             }
-            catch (const std::runtime_error&) {
+            catch (const std::out_of_range&) {
                 read_from_server();
+                return;
+            }
+            catch (const std::runtime_error& varint_error) {
+                std::cout << "An error occured while reading the packet length from the server: " << varint_error.what() << '\n';
+                close();
             }
 
-            const size_t total_packet_length = packet_length.bytes().size() + packet_length.value();
-            if (total_packet_length < m_server_read_buffer.size()) {
-                read_from_server();
+            const size_t total_packet_length = packet_length.value() + packet_length.bytes().size();
+            if (m_server_read_buffer.size() < total_packet_length) {
+                const size_t bytes_remaining = total_packet_length - m_server_read_buffer.size();
+                auto buf = std::make_shared<std::vector<mc_byte>>(bytes_remaining);
+
+                asio::async_read(m_proxy_to_server_socket, 
+                    asio::buffer(*buf), 
+                    asio::transfer_exactly(bytes_remaining), 
+                    [self = shared_from_this(), buf, bytes_remaining] (const asio::error_code& ec, size_t) {
+                        if (!ec) {
+                            self->m_server_read_buffer.insert(self->m_server_read_buffer.end(), buf->begin(), buf->begin() + bytes_remaining);
+                            self->handle_read_from_server(ec, bytes_remaining);
+                        }
+                        else {
+                            self->close();
+                        }
+                    }
+                );
+
+                return;
             }
-            
-            asio::async_write(m_proxy_to_client_socket, asio::buffer(m_server_read_buffer, total_packet_length), [self = shared_from_this(), total_packet_length](const asio::error_code& ec, size_t) {
-                self->read_from_client();
-                self->read_from_server();
-                asio::dynamic_buffer(self->m_server_read_buffer).consume(total_packet_length);
+
+            const auto packet = asio::buffer(m_server_read_buffer, total_packet_length);
+            asio::async_write(m_proxy_to_client_socket, packet, [self = shared_from_this(), total_packet_length](const asio::error_code& ec, size_t) {
+                if (!ec) {
+                    self->m_server_read_buffer.erase(self->m_server_read_buffer.begin(), self->m_server_read_buffer.begin() + total_packet_length);
+                    self->read_from_server();
+                }
+                else {
+                    self->close();
+                }
             });
         }
         else {
-            std::cout << "Failed to read from server: " << ec.message() << '\n';
             close();
         }
     }

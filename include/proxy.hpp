@@ -6,6 +6,7 @@
 #include "asio/ip/tcp.hpp"
 #include "asio/streambuf.hpp"
 #include "asio/buffers_iterator.hpp"
+#include "mctypes.hpp"
 
 namespace spiff {
     class minecraft_proxy {
@@ -30,8 +31,8 @@ namespace spiff {
         void start();
         void close();
 
-        void read_from_server();
-        void read_from_client();
+        void read_from_server(int buffer_size = 1024);
+        void read_from_client(int buffer_size = 1024);
 
         void handle_connect(const asio::error_code& ec);
         void handle_read_from_client(const asio::error_code& ec, size_t bytes_transferred);
@@ -40,8 +41,7 @@ namespace spiff {
         asio::ip::tcp::socket m_proxy_to_client_socket;
         asio::ip::tcp::socket m_proxy_to_server_socket;
         asio::ip::tcp::endpoint m_server_endpoint;
-        std::vector<std::byte> m_client_read_buffer;
-        std::vector<std::byte> m_server_read_buffer;
-        const size_t m_buffer_size = 1024;
+        std::vector<mc_byte> m_client_read_buffer;
+        std::vector<mc_byte> m_server_read_buffer;
     };
 };

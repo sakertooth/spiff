@@ -6,8 +6,13 @@ enable_testing()
 
 set(CMAKE_CXX_STANDARD 17)
 
-add_executable(spiff src/main.cpp src/proxy.cpp src/varint.cpp)
+# Create spiff
+add_executable(spiff src/main.cpp src/proxy.cpp src/varint_varlong.cpp)
 target_include_directories(spiff PRIVATE ${CMAKE_SOURCE_DIR}/include ${CMAKE_SOURCE_DIR}/3rdparty/asio/asio/include)
+
+# Add tests
+add_subdirectory(tests)
+add_test(NAME VarintVarlong COMMAND varint_varlong)
 
 set(CPACK_PROJECT_NAME ${PROJECT_NAME})
 set(CPACK_PROJECT_VERSION ${PROJECT_VERSION})
