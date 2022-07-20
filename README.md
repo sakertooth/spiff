@@ -19,6 +19,6 @@ Optional arguments:
 
 ## Libraries
 [asio](https://think-async.com/Asio/)  
-[Botcraft](https://github.com/adepierre/Botcraft)  
+[ProtocolCraft (Botcraft)](https://github.com/adepierre/Botcraft)  
 
 The libraries are in the from of Git submodules, so no library installations on the machine are necessary.
