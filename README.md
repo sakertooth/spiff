@@ -1,5 +1,8 @@
 # spiff
-Spiff is a Minecraft proxy used to read and dissect packets between clients and servers.
+Spiff is a Minecraft proxy used to read and dissect packets between clients and servers. The client connects to Spiff, and Spiff connects to the server. Packets sent by the client get forward to the server through spiff, and vice versa for the server. The packets sent through Spiff on both ends are interpreted, parsed and logged, effectively acting as a Man-in-the-middle (MITM).
+
+## Motivation
+The motivating factor was to gain more insight on the Minecraft protocol (as well as everything that comes with it such as ZLib compression) and proxies.
 
 ## Usage
 ```
@@ -18,4 +21,4 @@ Optional arguments:
 [asio](https://think-async.com/Asio/)  
 [Botcraft](https://github.com/adepierre/Botcraft)  
 
-The libraries are in the from of Git submodules, so no library installations are needed.
+The libraries are in the from of Git submodules, so no library installations on the machine are necessary.
